@@ -1,17 +1,23 @@
-from datetime import datetime, timedelta
-import importlib
-from itertools import ifilter
-from pip.utils import logging
+
 
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
+
 from tables import *
 import tables
 import os, sys, inspect
 from sqlalchemy import Column, ForeignKey, Integer, String, MetaData, create_engine, select, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, mapper, query, create_session,relationship, load_only
+from pyExcelerator import *
+from datetime import datetime, timedelta
+import importlib
+from itertools import ifilter
+from pip.utils import logging
 
 
+class resultLog:
+    pass
 
 
 
@@ -33,6 +39,94 @@ def str_to_class(module_name, class_name):
         logging.error('Module does not exist')
     return class_ or None
 
+def countLog(listCount,mac,time):
+    count = 0
+    if time != None:
+        for i in range(0,len(listCount)):
+            if listCount[i].online_time.date() == time.date():
+                if listCount[i].mac == mac:
+                    count+=1
+    else:
+        for i in range(0,len(listCount)):
+            if listCount[i].mac == mac:
+                count+=1
+    return count
+
+def cleanList(listCount,mac,time):
+    for row in listCount:
+        if row.online_time.date() == time.date():
+            if row.mac == mac:
+                listCount.remove(row)
+    return listCount
+
+def checkmac(listlog,mac,time):
+    for row in listlog:
+        # if row['mac'] == mac and row['online_time'].date() == time.date():
+        # if row['Mac ACS'] == mac:
+        if row.mac == mac:
+            return True
+    return False
+
+def listCountLogNormal2(listlogDB,modelname):
+    listlog = []
+    for row in listlogDB:
+        tmp = 0
+        count = 0
+        for i in range(1,8):
+            dateAgo = now - timedelta(days=i)
+            countlog = countLog(listlogDB,row.mac,dateAgo)
+            if countlog > 9:
+                tmp += countlog
+                count += 1
+        if tmp < 9:
+            continue
+        avg = tmp / count
+        if checkmac(listlog,row.mac,dateAgo) == False:
+            listlog.append({
+                'Model': modelname,
+                'Group': row.Group_name,
+                'Mac ACS': row.mac,
+                'Type': 'Boot Log',
+                'online_time': row.online_time,
+                'AVG/Day': avg,
+            })
+            listlog.append(tmp)
+
+    return listlog
+
+def listCountLogBoot2(listlogDB,modelname):
+    listlog = []
+    for row in listlogDB:
+        tmp = 0
+        count = 0
+        for i in range(1,8):
+            dateAgo = now - timedelta(days=i)
+            countlog = countLog(listlogDB,row.mac,dateAgo)
+            if countlog > 2:
+                tmp += countlog
+                count += 1
+        if tmp < 2:
+            continue
+        avg = tmp / count
+        if checkmac(listlog,row.mac,dateAgo) == False:
+            listlog.append({
+                'Model': modelname,
+                'Group': row.Group_name,
+                'Mac ACS': row.mac,
+                'Type': 'Boot Log',
+                'online_time': row.online_time,
+                'AVG/Day': avg,
+            })
+            listlog.append(tmp)
+
+    return listlog
+
+
+def listCountLogNormal(listlogDB,modelname):
+
+def listCountLogBoot(listlogDB,modelname):
+
+
 
 
 
@@ -41,54 +135,121 @@ engine = create_engine("mysql+pymysql://ftelacs:P@$$vv0rd:@localhost/ftelacs")
 # conn = engine.connect()
 
 session = create_session(bind=engine)
-# test = select([ModelList.name])
-# print conn.execute(test).rowcount
 
-# modellist = session.query(ModelList).options(load_only(ModelList.name,ModelList.request_log_table))
 modellist = session.query(ModelList.name,ModelList.request_log_table).all()
 
-
-
-
-# test = session.query(MacList.Group_id,MacList.MAC_address,GroupList.Group_name,RequestLogXCIGG93RGNewCIGG93RGProfileNew.mac,RequestLogXCIGG93RGNewCIGG93RGProfileNew.event_code,RequestLogXCIGG93RGNewCIGG93RGProfileNew.online_time).outerjoin(GroupList).outerjoin(RequestLogXCIGG93RGNewCIGG93RGProfileNew).limit(100)
-#test = session.query(RequestLogXTW4PortWifiTPLinkADSLNoWifi.mac,RequestLogXTW4PortWifiTPLinkADSLNoWifi.event_code,RequestLogXTW4PortWifiTPLinkADSLNoWifi.online_time,MacList.Group_id,GroupList.Group_name).outerjoin(MacList).outerjoin(GroupList).group_by(RequestLogXTW4PortWifiTPLinkADSLNoWifi.mac).having(func.count(RequestLogXTW4PortWifiTPLinkADSLNoWifi.mac) == 1)
-now = datetime.now()
-last_week = now - timedelta(days=6)
-
-# test = session.query(RequestLogXTW4PortWifiTPLinkADSLNoWifi.mac,RequestLogXTW4PortWifiTPLinkADSLNoWifi.event_code,RequestLogXTW4PortWifiTPLinkADSLNoWifi.online_time,MacList.Group_id,GroupList.Group_name).outerjoin(MacList).outerjoin(GroupList).filter(RequestLogXTW4PortWifiTPLinkADSLNoWifi.online_time > last_week).filter(RequestLogXTW4PortWifiTPLinkADSLNoWifi.event_code.contains('BOOT')).group_by(RequestLogXTW4PortWifiTPLinkADSLNoWifi.mac).having(func.count(RequestLogXTW4PortWifiTPLinkADSLNoWifi.mac) > 2)
 logClass = RequestLogXTW4PortWifiTPLinkADSLNoWifi
-test = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name,func.count(logClass.event_code).label('count')).outerjoin(MacList).outerjoin(GroupList).filter(func.DATE(logClass.online_time) == last_week.date()).filter(~logClass.event_code.contains('BOOT')).group_by(logClass.mac).having(func.count(logClass.mac) > 9)
-# test2 = test.add_column(modellist)
-#test2 = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name).outerjoin(MacList).outerjoin(GroupList).filter(logClass.online_time < last_week).filter(~logClass.event_code.contains('BOOT')).group_by(logClass.mac).having(func.count(logClass.mac) > 9)
-# session.query().having
-# test1 = session.query(GroupList).
-# print test
-# test.outerjoin
-# print dir(test)
 
-print test
+
+
+now = datetime.now()
+aweek = now - timedelta(days=7)
+test = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name)\
+    .outerjoin(MacList).outerjoin(GroupList)\
+    .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(~logClass.event_code.contains('BOOT')).all()
+
+test2 = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name,func.count(logClass.mac))\
+    .outerjoin(MacList).outerjoin(GroupList)\
+    .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT')).group_by(logClass.mac).all()
+
+print test2
+
+# dayoflogNormal = listCountLogNormal(test,'CPE')
+# dayoflogBoot = listCountLogBoot(test2,'CPE')
+
 a = 0
+# print dayoflogNormal[0].Group
+# for row in dayoflogNormal[0]:
+#     print row
+# for row in range(0,len(dayoflogNormal)):
+# for row in dayoflogNormal:
+#     print dayoflogNormal[row]
+#     for i in dayoflogNormal[row]:
+    #     print i
+    # a+=1
+
+# for row in dayoflogBoot:
+#     # for i in row:
+#     #     print i,'a'
+#     a+=1
 
 
-for row in test:
-    print dir(test)
-    print row.Group_name, row.mac, row.event_code, row.online_time, row.count
-    a+=1
-print a
+
+wb = Workbook()
+ws0 = wb.add_sheet('0')
+
+borders = Borders()
+borders.left = 1
+borders.right = 1
+borders.top = 1
+borders.bottom = 1
+
+borders_cell = Borders()
+borders_cell.right = 1
+
+TestNoPat = Pattern()
+TestNoPat.pattern = Pattern.SOLID_PATTERN
+TestNoPat.pattern_fore_colour = 0x07
+
+Alg = Alignment()
+Alg.horz = Alignment.HORZ_CENTER
+Alg.vert = Alignment.VERT_CENTER
+
+row_number=1
+# for row in dayoflogBoot:
+#
+#         i=0
+#         for item in row:
+#                 val=str(row[item])
+#
+#                 if row_number==1:
+#                         # val=str(item)
+#                         style = XFStyle()
+#                         style.borders = borders
+#                         style.pattern = TestNoPat
+#                         style.alignment = Alg
+#                         ws0.write(0,i,'', style)
+#                         ws0.write(0,i,item, style)
+#                         style = XFStyle()
+#                         style.borders = borders_cell
+#                         ws0.write(row_number,i,val, style)
+#                         i= i+1
+#                 else:
+#                         style = XFStyle()
+#                         style.borders = borders_cell
+#                         ws0.write(row_number,i,val, style)
+#                         i=i+1
+#
+#         row_number=row_number+1
+#
+# wb.save('test.xls')
 
 
 
 class_list = inspect.getmembers(sys.modules[__name__], inspect.isclass)
 
-# now = datetime.now()
+# numbernormal = 0
+# numberboot = 0
+#
 # for model in modellist:
 #     for logTable in class_list:
 #         if logTable[0].startswith('RequestLog'):
 #             if model.request_log_table == str_to_class('tables','%s'%logTable[0]).__tablename__ :
 #                 logClass = getattr(tables,'%s'%logTable[0])
-#                 for time in range(1,8):
-#                     dateAgo = now - timedelta(days=time)
-#                     rs = session.query(logClass,GroupList.Group_id,GroupList.Group_name).
+#                 rsDBNormalLog = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name).outerjoin(MacList).outerjoin(GroupList).filter(func.DATE(logClass.online_time) >= aweek.date()).filter(~logClass.event_code.contains('BOOT')).all()
+#                 rsDBBootLog = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name).outerjoin(MacList).outerjoin(GroupList).filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT')).all()
+#                 rsNormalLog = listCountLogNormal(rsDBNormalLog,model.name)
+#                 rsBootLog = listCountLogBoot(rsDBNormalLog,model.name)
+#
+# for row in range(0,len(rsNormalLog)):
+#     numbernormal += 1
+#
+# for row in range(0,len(rsBootLog)):
+#     numberboot += 1
+#
+# print 'Number of normal log : ', numbernormal
+# print 'Number of boot log :  ', numberboot
+
 
 
 
