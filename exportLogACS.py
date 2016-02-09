@@ -67,7 +67,7 @@ def checkmac(listlog,mac,time):
             return True
     return False
 
-def listCountLogNormal2(listlogDB,modelname):
+def listCountLogNormal(listlogDB,modelname):
     listlog = []
     for row in listlogDB:
         tmp = 0
@@ -78,7 +78,7 @@ def listCountLogNormal2(listlogDB,modelname):
             if countlog > 9:
                 tmp += countlog
                 count += 1
-        if tmp < 9:
+        if count < 7:
             continue
         avg = tmp / count
         if checkmac(listlog,row.mac,dateAgo) == False:
@@ -94,7 +94,7 @@ def listCountLogNormal2(listlogDB,modelname):
 
     return listlog
 
-def listCountLogBoot2(listlogDB,modelname):
+def listCountLogBoot(listlogDB,modelname):
     listlog = []
     for row in listlogDB:
         tmp = 0
@@ -105,7 +105,7 @@ def listCountLogBoot2(listlogDB,modelname):
             if countlog > 2:
                 tmp += countlog
                 count += 1
-        if tmp < 2:
+        if count < 7:
             continue
         avg = tmp / count
         if checkmac(listlog,row.mac,dateAgo) == False:
@@ -122,9 +122,9 @@ def listCountLogBoot2(listlogDB,modelname):
     return listlog
 
 
-def listCountLogNormal(listlogDB,modelname):
+# def listCountLogNormal(listlogDB,modelname):
 
-def listCountLogBoot(listlogDB,modelname):
+# def listCountLogBoot(listlogDB,modelname):
 
 
 
@@ -144,18 +144,20 @@ logClass = RequestLogXTW4PortWifiTPLinkADSLNoWifi
 
 now = datetime.now()
 aweek = now - timedelta(days=7)
+print datetime.now()
 test = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name)\
     .outerjoin(MacList).outerjoin(GroupList)\
     .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(~logClass.event_code.contains('BOOT')).all()
 
-test2 = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name,func.count(logClass.mac))\
+test2 = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name)\
     .outerjoin(MacList).outerjoin(GroupList)\
-    .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT')).group_by(logClass.mac).all()
+    .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT')).all()
 
 print test2
-
-# dayoflogNormal = listCountLogNormal(test,'CPE')
-# dayoflogBoot = listCountLogBoot(test2,'CPE')
+print test
+print datetime.now()
+dayoflogNormal = listCountLogNormal(test,'CPE')
+dayoflogBoot = listCountLogBoot(test2,'CPE')
 
 a = 0
 # print dayoflogNormal[0].Group
@@ -168,12 +170,19 @@ a = 0
     #     print i
     # a+=1
 
-# for row in dayoflogBoot:
-#     # for i in row:
-#     #     print i,'a'
-#     a+=1
+for row in dayoflogNormal:
+    # for i in row:
+    #     print i,'a'
+    a+=1
+print a
 
+a= 0
+for row in dayoflogBoot:
+    # for i in row:
+    #     print i,'a'
+    a+=1
 
+print a
 
 wb = Workbook()
 ws0 = wb.add_sheet('0')
@@ -196,59 +205,65 @@ Alg.horz = Alignment.HORZ_CENTER
 Alg.vert = Alignment.VERT_CENTER
 
 row_number=1
-# for row in dayoflogBoot:
-#
-#         i=0
-#         for item in row:
-#                 val=str(row[item])
-#
-#                 if row_number==1:
-#                         # val=str(item)
-#                         style = XFStyle()
-#                         style.borders = borders
-#                         style.pattern = TestNoPat
-#                         style.alignment = Alg
-#                         ws0.write(0,i,'', style)
-#                         ws0.write(0,i,item, style)
-#                         style = XFStyle()
-#                         style.borders = borders_cell
-#                         ws0.write(row_number,i,val, style)
-#                         i= i+1
-#                 else:
-#                         style = XFStyle()
-#                         style.borders = borders_cell
-#                         ws0.write(row_number,i,val, style)
-#                         i=i+1
-#
-#         row_number=row_number+1
-#
-# wb.save('test.xls')
+for row in dayoflogBoot:
+
+        i=0
+        for item in row:
+                val=str(row[item])
+
+                if row_number==1:
+                        # val=str(item)
+                        style = XFStyle()
+                        style.borders = borders
+                        style.pattern = TestNoPat
+                        style.alignment = Alg
+                        ws0.write(0,i,'', style)
+                        ws0.write(0,i,item, style)
+                        style = XFStyle()
+                        style.borders = borders_cell
+                        ws0.write(row_number,i,val, style)
+                        i= i+1
+                else:
+                        style = XFStyle()
+                        style.borders = borders_cell
+                        ws0.write(row_number,i,val, style)
+                        i=i+1
+
+        row_number=row_number+1
+
+wb.save('test.xls')
 
 
 
 class_list = inspect.getmembers(sys.modules[__name__], inspect.isclass)
 
-# numbernormal = 0
-# numberboot = 0
-#
+numbernormal = 0
+numberboot = 0
+
 # for model in modellist:
 #     for logTable in class_list:
 #         if logTable[0].startswith('RequestLog'):
 #             if model.request_log_table == str_to_class('tables','%s'%logTable[0]).__tablename__ :
 #                 logClass = getattr(tables,'%s'%logTable[0])
-#                 rsDBNormalLog = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name).outerjoin(MacList).outerjoin(GroupList).filter(func.DATE(logClass.online_time) >= aweek.date()).filter(~logClass.event_code.contains('BOOT')).all()
-#                 rsDBBootLog = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name).outerjoin(MacList).outerjoin(GroupList).filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT')).all()
-#                 rsNormalLog = listCountLogNormal(rsDBNormalLog,model.name)
-#                 rsBootLog = listCountLogBoot(rsDBNormalLog,model.name)
+#                 test = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name,func.count(logClass.mac))\
+#                                         .outerjoin(MacList).outerjoin(GroupList)\
+#                                         .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(~logClass.event_code.contains('BOOT')).group_by(logClass.mac).having(func.count(logClass.mac) >= 21).all()
 #
+#                 test2 = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name,func.count(logClass.mac))\
+#                                         .outerjoin(MacList).outerjoin(GroupList)\
+#                                         .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT')).group_by(logClass.mac).having(func.count(logClass.mac) >= 70).all()
+#
+                # rsNormalLog = listCountLogNormal(rsDBNormalLog,model.name)
+                # rsBootLog = listCountLogBoot(rsDBNormalLog,model.name)
+
 # for row in range(0,len(rsNormalLog)):
 #     numbernormal += 1
 #
 # for row in range(0,len(rsBootLog)):
 #     numberboot += 1
-#
-# print 'Number of normal log : ', numbernormal
-# print 'Number of boot log :  ', numberboot
+
+print 'Number of normal log : ', numbernormal
+print 'Number of boot log :  ', numberboot
 
 
 
