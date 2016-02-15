@@ -63,7 +63,10 @@ def checkmac(listlog,mac,time):
     for row in listlog:
         # if row['mac'] == mac and row['online_time'].date() == time.date():
         # if row['Mac ACS'] == mac:
-        if row.mac == mac:
+        # print row
+        # if row['MacACS'] == None:
+        #     continue
+        if row['Mac ACS'] == mac:
             return True
     return False
 
@@ -78,7 +81,7 @@ def listCountLogNormal(listlogDB,modelname):
             if countlog > 9:
                 tmp += countlog
                 count += 1
-        if count < 7:
+        if count < 6:
             continue
         avg = tmp / count
         if checkmac(listlog,row.mac,dateAgo) == False:
@@ -90,7 +93,6 @@ def listCountLogNormal(listlogDB,modelname):
                 'online_time': row.online_time,
                 'AVG/Day': avg,
             })
-            listlog.append(tmp)
 
     return listlog
 
@@ -105,7 +107,7 @@ def listCountLogBoot(listlogDB,modelname):
             if countlog > 2:
                 tmp += countlog
                 count += 1
-        if count < 7:
+        if count < 6:
             continue
         avg = tmp / count
         if checkmac(listlog,row.mac,dateAgo) == False:
@@ -117,7 +119,6 @@ def listCountLogBoot(listlogDB,modelname):
                 'online_time': row.online_time,
                 'AVG/Day': avg,
             })
-            listlog.append(tmp)
 
     return listlog
 
@@ -138,7 +139,7 @@ session = create_session(bind=engine)
 
 modellist = session.query(ModelList.name,ModelList.request_log_table).all()
 
-logClass = RequestLogXTW4PortWifiTPLinkADSLNoWifi
+logClass = RequestLogXHG531V12CIGG93RGProfileNew
 
 
 
@@ -153,8 +154,8 @@ test2 = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacL
     .outerjoin(MacList).outerjoin(GroupList)\
     .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT')).all()
 
-print test2
-print test
+# print test2
+# print test
 print datetime.now()
 dayoflogNormal = listCountLogNormal(test,'CPE')
 dayoflogBoot = listCountLogBoot(test2,'CPE')
@@ -169,20 +170,28 @@ a = 0
 #     for i in dayoflogNormal[row]:
     #     print i
     # a+=1
+print dayoflogNormal
+print dayoflogBoot
+# for row in range(0,len(dayoflogNormal)):
+#     #print dayoflogNormal[row]
+#     # for i in row:
+#     #     print i,'a'
+#     a+=1
+# print a
+#
+# a= 0
+# for row in dayoflogBoot:
+#     print row
+#     # for i in row:
+#     #     print i,'a'
+#     a+=1
+#
+# print a
 
-for row in dayoflogNormal:
-    # for i in row:
-    #     print i,'a'
-    a+=1
-print a
 
-a= 0
-for row in dayoflogBoot:
-    # for i in row:
-    #     print i,'a'
-    a+=1
 
-print a
+
+
 
 wb = Workbook()
 ws0 = wb.add_sheet('0')
