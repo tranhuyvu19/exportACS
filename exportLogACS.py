@@ -245,6 +245,7 @@ wb.save('test.xls')
 
 
 
+
 class_list = inspect.getmembers(sys.modules[__name__], inspect.isclass)
 
 numbernormal = 0
