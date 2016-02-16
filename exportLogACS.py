@@ -68,6 +68,7 @@ def checkmac(listlog,mac,time):
         #     continue
         if row['Mac ACS'] == mac:
             return True
+    print mac
     return False
 
 def listCountLogNormal(listlogDB,modelname):
@@ -139,7 +140,7 @@ session = create_session(bind=engine)
 
 modellist = session.query(ModelList.name,ModelList.request_log_table).all()
 
-logClass = RequestLogXHG531V12CIGG93RGProfileNew
+logClass = RequestLogXCIGG97D2CIGG93RGProfileNew
 
 
 
@@ -170,8 +171,8 @@ a = 0
 #     for i in dayoflogNormal[row]:
     #     print i
     # a+=1
-print dayoflogNormal
-print dayoflogBoot
+# print dayoflogNormal
+# print dayoflogBoot
 # for row in range(0,len(dayoflogNormal)):
 #     #print dayoflogNormal[row]
 #     # for i in row:
