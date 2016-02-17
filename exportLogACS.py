@@ -14,7 +14,7 @@ from datetime import datetime, timedelta
 import importlib
 from itertools import ifilter
 from pip.utils import logging
-
+import multiprocessing as mp
 
 class resultLog:
     pass
@@ -68,12 +68,11 @@ def checkmac(listlog,mac,time):
         #     continue
         if row['Mac ACS'] == mac:
             return True
-    print mac
     return False
 
-def listCountLogNormal(listlogDB,modelname):
+def listCountLogNormal(listlogDB,modelname,listmac):
     listlog = []
-    for row in listlogDB:
+    for row in listmac:
         tmp = 0
         count = 0
         for i in range(1,8):
@@ -82,24 +81,25 @@ def listCountLogNormal(listlogDB,modelname):
             if countlog > 9:
                 tmp += countlog
                 count += 1
+            else:
+                break
         if count < 6:
             continue
-        avg = tmp / count
-        if checkmac(listlog,row.mac,dateAgo) == False:
-            listlog.append({
-                'Model': modelname,
-                'Group': row.Group_name,
-                'Mac ACS': row.mac,
-                'Type': 'Boot Log',
-                'online_time': row.online_time,
-                'AVG/Day': avg,
-            })
-
+        else:
+            avg = tmp / count
+            if checkmac(listlog,row.mac,dateAgo) == False:
+                listlog.append({
+                    'Model': modelname,
+                    'Group': row.Group_name,
+                    'Mac ACS': row.mac,
+                    'Type': 'Normal Log',
+                    'AVG/Day': avg,
+                })
     return listlog
 
-def listCountLogBoot(listlogDB,modelname):
+def listCountLogBoot(listlogDB,modelname,listmac):
     listlog = []
-    for row in listlogDB:
+    for row in listmac:
         tmp = 0
         count = 0
         for i in range(1,8):
@@ -108,25 +108,23 @@ def listCountLogBoot(listlogDB,modelname):
             if countlog > 2:
                 tmp += countlog
                 count += 1
+            else:
+                break
         if count < 6:
             continue
-        avg = tmp / count
-        if checkmac(listlog,row.mac,dateAgo) == False:
-            listlog.append({
-                'Model': modelname,
-                'Group': row.Group_name,
-                'Mac ACS': row.mac,
-                'Type': 'Boot Log',
-                'online_time': row.online_time,
-                'AVG/Day': avg,
-            })
-
+        else:
+            avg = tmp / count
+            if checkmac(listlog,row.mac,dateAgo) == False:
+                listlog.append({
+                    'Model': modelname,
+                    'Group': row.Group_name,
+                    'Mac ACS': row.mac,
+                    'Type': 'Boot Log',
+                    'AVG/Day': avg,
+                })
     return listlog
 
 
-# def listCountLogNormal(listlogDB,modelname):
-
-# def listCountLogBoot(listlogDB,modelname):
 
 
 
@@ -134,7 +132,6 @@ def listCountLogBoot(listlogDB,modelname):
 
 
 engine = create_engine("mysql+pymysql://ftelacs:P@$$vv0rd:@localhost/ftelacs")
-# conn = engine.connect()
 
 session = create_session(bind=engine)
 
@@ -147,51 +144,39 @@ logClass = RequestLogXCIGG97D2CIGG93RGProfileNew
 now = datetime.now()
 aweek = now - timedelta(days=7)
 print datetime.now()
-test = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name)\
-    .outerjoin(MacList).outerjoin(GroupList)\
-    .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(~logClass.event_code.contains('BOOT')).all()
+
 
 test2 = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name)\
     .outerjoin(MacList).outerjoin(GroupList)\
+    .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(~logClass.event_code.contains('BOOT')).all()
+
+test3 = session.query(logClass.mac,logClass.online_time,GroupList.Group_name,func.count(logClass.mac))\
+                                        .outerjoin(MacList).outerjoin(GroupList)\
+                                        .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(~logClass.event_code.contains('BOOT'))\
+                                        .group_by(logClass.mac).having(func.count(logClass.mac) >= 70).all()
+
+test0 = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name)\
+    .outerjoin(MacList).outerjoin(GroupList)\
     .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT')).all()
 
-# print test2
-# print test
+test1 = session.query(logClass.mac,logClass.online_time,GroupList.Group_name,func.count(logClass.mac))\
+                                        .outerjoin(MacList).outerjoin(GroupList)\
+                                        .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT'))\
+                                        .group_by(logClass.mac).having(func.count(logClass.mac) >= 21).all()
+
+
 print datetime.now()
-dayoflogNormal = listCountLogNormal(test,'CPE')
-dayoflogBoot = listCountLogBoot(test2,'CPE')
+print 'Lenght normal log : ',len(test3)
+print 'Lenght boot log : ',len(test1)
+
+output= mp.Queue()
+dayoflogNormal = listCountLogNormal(test0,'CPE',test1)
+dayoflogBoot = listCountLogBoot(test2,'CPE',test3)
 
 a = 0
-# print dayoflogNormal[0].Group
-# for row in dayoflogNormal[0]:
-#     print row
-# for row in range(0,len(dayoflogNormal)):
-# for row in dayoflogNormal:
-#     print dayoflogNormal[row]
-#     for i in dayoflogNormal[row]:
-    #     print i
-    # a+=1
-# print dayoflogNormal
-# print dayoflogBoot
-# for row in range(0,len(dayoflogNormal)):
-#     #print dayoflogNormal[row]
-#     # for i in row:
-#     #     print i,'a'
-#     a+=1
-# print a
-#
-# a= 0
-# for row in dayoflogBoot:
-#     print row
-#     # for i in row:
-#     #     print i,'a'
-#     a+=1
-#
-# print a
 
 
-
-
+dayoflogBoot.append(dayoflogNormal)
 
 
 wb = Workbook()
