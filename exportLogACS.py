@@ -2,23 +2,43 @@
 
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-
-from tables import *
+import threading
 import tables
-import os, sys, inspect
-from sqlalchemy import Column, ForeignKey, Integer, String, MetaData, create_engine, select, func
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, mapper, query, create_session,relationship, load_only
-from pyExcelerator import *
+import inspect
 from datetime import datetime, timedelta
 import importlib
-from itertools import ifilter
-from pip.utils import logging
-import multiprocessing as mp
+from multiprocessing import Process,Manager,Pool
+import logging
 
-class resultLog:
-    pass
+from sqlalchemy import create_engine, func
+from sqlalchemy.orm import create_session
+from pyExcelerator import *
 
+from tables import *
+
+logger = logging.getLogger('exportACS')
+hdlr = logging.FileHandler('/var/log/exportACS.log')
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+logger.addHandler(hdlr)
+logger.setLevel(logging.INFO)
+
+
+manager = Manager()
+rslist = manager.list()
+threadLimiter = threading.BoundedSemaphore(40)
+
+class MyThread(threading.Thread):
+    def __init__(self, target, *args):
+        super(MyThread, self).__init__()
+        self._target = target
+        self._args = args
+    def run(self):
+        threadLimiter.acquire()
+        try:
+            self._target(*self._args)
+        finally:
+            threadLimiter.release()
 
 
 def get_size(group_list):
@@ -70,9 +90,30 @@ def checkmac(listlog,mac,time):
             return True
     return False
 
-def listCountLogNormal(listlogDB,modelname,listmac):
+def split_processing_normal(listlogDB,modelname,listmac,num_splits=8):
+    split_size = len(listmac) // num_splits
+    threads = []
+    for i in range(num_splits):
+        # determine the indices of the list this thread will handle
+        start = i * split_size
+        # special case on the last chunk to account for uneven splits
+        end = None if i+1 == num_splits else (i+1) * split_size
+        # create the thread
+        threads.append(
+            # threading.Thread(target=listCountLogNormal, args=(listlogDB,modelname,listmac,start,end)))
+            Process(target=listCountLogNormal, args=(listlogDB,modelname,listmac,start,end)))
+        threads[-1].start() # start the thread we just created
+
+    # wait for all threads to finish
+    for t in threads:
+        t.join()
+
+
+def listCountLogNormal(listlogDB,modelname,listmac,start,end):
+    start_time = datetime.now()
+    global  rslist
     listlog = []
-    for row in listmac:
+    for row in listmac[start:end]:
         tmp = 0
         count = 0
         for i in range(1,8):
@@ -95,11 +136,33 @@ def listCountLogNormal(listlogDB,modelname,listmac):
                     'Type': 'Normal Log',
                     'AVG/Day': avg,
                 })
-    return listlog
+    logger.info('Model Name : %s\t List MAC to scan : %s\t Total Normal Log: %s\t Duration: %s' % (modelname,len(listmac[start:end]),len(listlogDB),datetime.now() - start_time))
+    # return listlog
+    rslist += listlog
 
-def listCountLogBoot(listlogDB,modelname,listmac):
+def split_processing_boot(listlogDB,modelname,listmac,num_splits=8):
+    split_size = len(listmac) // num_splits
+    threads = []
+    for i in range(num_splits):
+        # determine the indices of the list this thread will handle
+        start = i * split_size
+        # special case on the last chunk to account for uneven splits
+        end = None if i+1 == num_splits else (i+1) * split_size
+        # create the thread
+        threads.append(
+            # threading.Thread(target=listCountLogBoot, args=(listlogDB,modelname,listmac,start,end)))
+            Process(target=listCountLogBoot, args=(listlogDB,modelname,listmac,start,end)))
+        threads[-1].start() # start the thread we just created
+
+    # wait for all threads to finish
+    for t in threads:
+        t.join()
+
+def listCountLogBoot(listlogDB,modelname,listmac,start,end):
+    start_time = datetime.now()
+    global rslist
     listlog = []
-    for row in listmac:
+    for row in listmac[start:end]:
         tmp = 0
         count = 0
         for i in range(1,8):
@@ -122,7 +185,9 @@ def listCountLogBoot(listlogDB,modelname,listmac):
                     'Type': 'Boot Log',
                     'AVG/Day': avg,
                 })
-    return listlog
+    logger.info('Model Name : %s\t List MAC to scan : %s\t Total Boot Log: %s\t Duration: %s' % (modelname,len(listmac[start:end]),len(listlogDB),datetime.now() - start_time))
+    # return listlog
+    rslist += listlog
 
 def exportExcel(rslist,file):
     wb = Workbook()
@@ -173,77 +238,76 @@ def exportExcel(rslist,file):
 
 
 
-engine = create_engine("mysql+pymysql://ftelacs:P@$$vv0rd:@localhost/ftelacs")
+engine = create_engine("mysql+pymysql://ftelacs:P@$$vv0rd:@localhost/ftelacs",pool_recycle=3600)
 
 session = create_session(bind=engine)
 
 modellist = session.query(ModelList.name,ModelList.request_log_table).all()
 
+thread_list = []
+
+pool = Pool(processes=4)
 
 now = datetime.now()
 aweek = now - timedelta(days=7)
 
-# test2 = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name)\
-#     .outerjoin(MacList).outerjoin(GroupList)\
-#     .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(~logClass.event_code.contains('BOOT')).all()
-#
-# test3 = session.query(logClass.mac,logClass.online_time,GroupList.Group_name,func.count(logClass.mac))\
-#                                         .outerjoin(MacList).outerjoin(GroupList)\
-#                                         .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(~logClass.event_code.contains('BOOT'))\
-#                                         .group_by(logClass.mac).having(func.count(logClass.mac) >= 70).all()
-#
-# test0 = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name)\
-#     .outerjoin(MacList).outerjoin(GroupList)\
-#     .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT')).all()
-#
-# test1 = session.query(logClass.mac,logClass.online_time,GroupList.Group_name,func.count(logClass.mac))\
-#                                         .outerjoin(MacList).outerjoin(GroupList)\
-#                                         .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT'))\
-#                                         .group_by(logClass.mac).having(func.count(logClass.mac) >= 21).all()
-#
-#
-#
-# dayoflogNormal = listCountLogNormal(test2,'CPE',test3)
-# dayoflogBoot = listCountLogBoot(test0,'CPE',test1)
-
-
-rslist = list()
-
-
-
+total_log = 0
 
 class_list = inspect.getmembers(sys.modules[__name__], inspect.isclass)
+
+logger.info('Start Scanning %s ...' % now)
 
 for model in modellist:
     for logTable in class_list:
         if logTable[0].startswith('RequestLog'):
             if model.request_log_table == str_to_class('tables','%s'%logTable[0]).__tablename__ :
                 logClass = getattr(tables,'%s'%logTable[0])
+                logger.info('Querying Database for %s' % logClass)
 
-                rsDBNormalLog = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name)\
-                                                        .outerjoin(MacList).outerjoin(GroupList)\
-                                                        .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(~logClass.event_code.contains('BOOT')).all()
 
                 firstscanNormalLog = session.query(logClass.mac,logClass.online_time,GroupList.Group_name,func.count(logClass.mac))\
                                                         .outerjoin(MacList).outerjoin(GroupList)\
                                                         .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(~logClass.event_code.contains('BOOT'))\
                                                         .group_by(logClass.mac).having(func.count(logClass.mac) >= 70).all()
 
-                rsDBBootLog = session.query(logClass.mac,logClass.event_code,logClass.online_time,MacList.Group_id,GroupList.Group_name)\
+                if len(firstscanNormalLog) != 0:
+                    rsDBNormalLog = session.query(logClass.mac,logClass.online_time)\
                                                         .outerjoin(MacList).outerjoin(GroupList)\
-                                                        .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT')).all()
+                                                        .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(~logClass.event_code.contains('BOOT')).all()
+                    total_log += len(rsDBNormalLog)
 
                 firstscanBootLog = session.query(logClass.mac,logClass.online_time,GroupList.Group_name,func.count(logClass.mac))\
                                                         .outerjoin(MacList).outerjoin(GroupList)\
                                                         .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT'))\
                                                         .group_by(logClass.mac).having(func.count(logClass.mac) >= 21).all()
 
-                rsNormalLog = listCountLogNormal(rsDBNormalLog,model.name,firstscanNormalLog)
-                rsBootLog = listCountLogBoot(rsDBBootLog,model.name,firstscanBootLog)
-                rslist += rsNormalLog
-                rslist += rsBootLog
+                if len(firstscanBootLog) != 0:
+                    rsDBBootLog = session.query(logClass.mac,logClass.online_time)\
+                                                        .outerjoin(MacList).outerjoin(GroupList)\
+                                                        .filter(func.DATE(logClass.online_time) >= aweek.date()).filter(logClass.event_code.contains('BOOT')).all()
+                    total_log += len(rsDBBootLog)
+
+                logger.info('Processing Scanning ... ')
+
+                if len(firstscanNormalLog) != 0:
+                    t = Process(target=split_processing_normal,args=(rsDBNormalLog,model.name,firstscanNormalLog))
+                    t.start()
+                    t.join()
+
+                if len(firstscanBootLog) != 0:
+                    t2 = Process(target=split_processing_boot,args=(rsDBBootLog,model.name,firstscanBootLog))
+                    t2.start()
+                    t2.join()
+
+
+
+
+
 
 exportExcel(rslist,'LogCPE_%s.xls' %now.date())
+
+logger.info('Total duration : %s\t Total Log: %s\t Total MAC Matched : %s' %((datetime.now() - now),total_log,len(rslist)))
+logger.info('Done')
 
 
 
